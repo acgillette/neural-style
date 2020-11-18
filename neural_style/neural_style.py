@@ -17,6 +17,13 @@ from transformer_net import TransformerNet
 from vgg import Vgg16
 
 
+def load_ckp(checkpoint_fpath, model, optimizer):
+    checkpoint = torch.load(checkpoint_fpath)
+    model.load_state_dict(checkpoint['state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    return model, optimizer, checkpoint['epoch']
+
+
 def check_paths(args):
     try:
         if not os.path.exists(args.save_model_dir):
@@ -45,6 +52,9 @@ def train(args):
 
     transformer = TransformerNet().to(device)
     optimizer = Adam(transformer.parameters(), args.lr)
+    start_epoch = 0
+    if args.checkpoint_load_path:
+        transformer, optimizer, start_epoch = load_ckp(args.checkpoint_load_path, transformer, optimizer)
     mse_loss = torch.nn.MSELoss()
 
     vgg = Vgg16(requires_grad=False).to(device)
@@ -59,7 +69,7 @@ def train(args):
     features_style = vgg(utils.normalize_batch(style))
     gram_style = [utils.gram_matrix(y) for y in features_style]
 
-    for e in range(args.epochs):
+    for e in range(start_epoch, args.epochs):
         transformer.train()
         agg_content_loss = 0.
         agg_style_loss = 0.
@@ -205,6 +215,8 @@ def main():
                                   help="number of images after which the training loss is logged, default is 500")
     train_arg_parser.add_argument("--checkpoint-interval", type=int, default=2000,
                                   help="number of batches after which a checkpoint of the trained model will be created")
+    train_arg_parser.add_argument("--checkpoint-load-path", type=str, default=None,
+                                help="optionally load a checkpoint to continue training")
 
     eval_arg_parser = subparsers.add_parser("eval", help="parser for evaluation/stylizing arguments")
     eval_arg_parser.add_argument("--content-image", type=str, required=True,
